@@ -4,6 +4,7 @@ import { createBrowserRouter, RouterProvider } from "react-router-dom";
 import "./index.css";
 import Home from "./views/Home";
 import PollLayout from "./layouts/PollLayout";
+import NewPoll from "./views/NewPoll";
 import { AppKitProvider } from "./context/appkit.context";
 
 const router = createBrowserRouter([
@@ -13,7 +14,12 @@ const router = createBrowserRouter([
   },
   {
     element: <PollLayout />,
-    children: [],
+    children: [
+      {
+        path: "new",
+        element: <NewPoll />,
+      },
+    ],
   },
 ]);
 
