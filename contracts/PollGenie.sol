@@ -3,17 +3,22 @@ pragma solidity ^0.8.24;
 
 contract PollGenie {
     struct PollOption {
+        bytes32 id;
         string text;
-        bytes32 id; // UUID-like unique identifier
+        uint count;
     }
 
     struct PollData {
         string title;
         string description;
-        PollOption[] options; // Updated to use PollOption struct
-        mapping(bytes32 => address[]) optionVoters; // Mapping by optionID
+        mapping(bytes32 => PollOption) options;
+        bytes32[] optionIds;
+        mapping(bytes32 => address[]) optionVoters;
         mapping(address => bool) hasVoted;
         mapping(address => bool) isWhitelisted;
+        mapping(address => bytes32) voterChoice;
+        uint votesCast;
+        uint whitelistedCount;
         bool isOpen;
     }
 
@@ -22,7 +27,6 @@ contract PollGenie {
         string title;
         string description;
         PollOption[] options;
-        uint[] voteCounts;
         bool isOpen;
     }
 
@@ -30,8 +34,15 @@ contract PollGenie {
     uint public pollCount;
     mapping(uint => PollData) private polls;
 
+    error OnlyOwner();
+    error PollDoesNotExist();
+    error PollNotOpen();
+    error NotWhitelisted();
+    error AlreadyVoted();
+    error InvalidOptionId();
+
     modifier onlyOwner() {
-        require(msg.sender == owner, "Only the owner can perform this action");
+        if (msg.sender != owner) revert OnlyOwner();
         _;
     }
 
@@ -41,17 +52,18 @@ contract PollGenie {
     }
 
     modifier pollIsOpen(uint pollId) {
-        require(polls[pollId].isOpen, "The poll is not open");
+        require(polls[pollId].isOpen, "Poll is not open");
         _;
     }
 
     modifier onlyWhitelisted(uint pollId) {
-        require(
-            polls[pollId].isWhitelisted[msg.sender],
-            "You are not whitelisted to vote"
-        );
+        require(polls[pollId].isWhitelisted[msg.sender], "Not whitelisted");
         _;
     }
+
+    event PollCreated(uint pollId, string title);
+    event PollVoted(uint pollId, bytes32 optionId, address voter);
+    event PollClosed(uint pollId);
 
     constructor() {
         owner = msg.sender;
@@ -71,11 +83,15 @@ contract PollGenie {
             bytes32 optionId = keccak256(
                 abi.encodePacked(_title, _description, _optionTexts[i], i)
             );
-            newPoll.options.push(
-                PollOption({text: _optionTexts[i], id: optionId})
-            );
+            newPoll.options[optionId] = PollOption({
+                id: optionId,
+                text: _optionTexts[i],
+                count: 0
+            });
+            newPoll.optionIds.push(optionId);
         }
 
+        emit PollCreated(pollCount, _title);
         pollCount++;
     }
 
@@ -85,54 +101,43 @@ contract PollGenie {
     ) external onlyWhitelisted(pollId) pollIsOpen(pollId) pollExists(pollId) {
         PollData storage poll = polls[pollId];
 
-        require(!poll.hasVoted[msg.sender], "You have already voted");
-
+        if (poll.hasVoted[msg.sender]) revert AlreadyVoted();
         require(
-            poll.optionVoters[optionId].length > 0 ||
-                isOptionExists(pollId, optionId),
+            bytes(poll.options[optionId].text).length > 0,
             "Invalid option ID"
         );
 
         poll.optionVoters[optionId].push(msg.sender);
         poll.hasVoted[msg.sender] = true;
-    }
+        poll.voterChoice[msg.sender] = optionId;
+        poll.options[optionId].count++;
+        poll.votesCast++;
 
-    function isOptionExists(
-        uint pollId,
-        bytes32 optionId
-    ) internal view returns (bool) {
-        PollData storage poll = polls[pollId];
-        for (uint i = 0; i < poll.options.length; i++) {
-            if (poll.options[i].id == optionId) {
-                return true;
-            }
+        if (allVotesCast(poll)) {
+            poll.isOpen = false;
+            emit PollClosed(pollId);
+        } else {
+            emit PollVoted(pollId, optionId, msg.sender);
         }
-        return false;
     }
 
-    function closePoll(uint pollId) external onlyOwner pollExists(pollId) {
-        polls[pollId].isOpen = false;
+    function allVotesCast(PollData storage poll) internal view returns (bool) {
+        return poll.votesCast >= poll.whitelistedCount;
     }
 
-    function addToWhitelist(
+    function updateWhitelist(
         uint pollId,
-        address _address
+        address _address,
+        bool status
     ) external onlyOwner pollExists(pollId) {
-        polls[pollId].isWhitelisted[_address] = true;
-    }
+        PollData storage poll = polls[pollId];
+        poll.isWhitelisted[_address] = status;
 
-    function removeFromWhitelist(
-        uint pollId,
-        address _address
-    ) external onlyOwner pollExists(pollId) {
-        polls[pollId].isWhitelisted[_address] = false;
-    }
-
-    function getVotes(
-        uint pollId,
-        bytes32 optionId
-    ) external view pollExists(pollId) returns (uint) {
-        return polls[pollId].optionVoters[optionId].length;
+        if (status) {
+            poll.whitelistedCount++;
+        } else if (poll.whitelistedCount > 0) {
+            poll.whitelistedCount--;
+        }
     }
 
     function getOptionVoters(
@@ -142,73 +147,49 @@ contract PollGenie {
         return polls[pollId].optionVoters[optionId];
     }
 
-    function getOptions(
-        uint pollId
-    ) external view pollExists(pollId) returns (PollOption[] memory) {
-        return polls[pollId].options;
-    }
-
-    function getTitle(
-        uint pollId
-    ) external view pollExists(pollId) returns (string memory) {
-        return polls[pollId].title;
-    }
-
-    function getDescription(
-        uint pollId
-    ) external view pollExists(pollId) returns (string memory) {
-        return polls[pollId].description;
-    }
-
-    function isPollOpen(
-        uint pollId
-    ) external view pollExists(pollId) returns (bool) {
-        return polls[pollId].isOpen;
-    }
-
     function getVoterChoice(
         uint pollId,
         address _voter
     ) public view pollExists(pollId) returns (bytes32) {
+        return polls[pollId].voterChoice[_voter];
+    }
+
+    function getPollView(uint pollId) internal view returns (PollView memory) {
         PollData storage poll = polls[pollId];
-        for (uint i = 0; i < poll.options.length; i++) {
-            address[] memory voters = poll.optionVoters[poll.options[i].id];
-            for (uint j = 0; j < voters.length; j++) {
-                if (voters[j] == _voter) {
-                    return poll.options[i].id;
-                }
-            }
-        }
-        return bytes32(0); // Return a sentinel value if no choice is found
-    }
+        uint optionsLength = poll.optionIds.length;
+        PollOption[] memory options = new PollOption[](optionsLength);
 
-    function getAllPollIds() external view returns (uint[] memory) {
-        uint[] memory allPollIds = new uint[](pollCount);
-        for (uint i = 0; i < pollCount; i++) {
-            allPollIds[i] = i;
-        }
-        return allPollIds;
-    }
-
-    function getAllPolls() external view returns (PollView[] memory) {
-        PollView[] memory allPolls = new PollView[](pollCount);
-        for (uint i = 0; i < pollCount; i++) {
-            PollData storage poll = polls[i];
-            uint[] memory voteCounts = new uint[](poll.options.length);
-            for (uint j = 0; j < poll.options.length; j++) {
-                voteCounts[j] = poll.optionVoters[poll.options[j].id].length;
-            }
-
-            allPolls[i] = PollView({
-                id: i,
-                title: poll.title,
-                description: poll.description,
-                options: poll.options,
-                voteCounts: voteCounts,
-                isOpen: poll.isOpen
+        for (uint i = 0; i < optionsLength; i++) {
+            bytes32 optionId = poll.optionIds[i];
+            options[i] = PollOption({
+                id: optionId,
+                text: poll.options[optionId].text,
+                count: poll.options[optionId].count
             });
         }
 
+        return
+            PollView({
+                id: pollId,
+                title: poll.title,
+                description: poll.description,
+                options: options,
+                isOpen: poll.isOpen
+            });
+    }
+
+    function getAllPolls() external view returns (PollView[] memory) {
+        uint count = pollCount;
+        PollView[] memory allPolls = new PollView[](count);
+        for (uint i = 0; i < count; i++) {
+            allPolls[i] = getPollView(i);
+        }
         return allPolls;
+    }
+
+    function getPollById(
+        uint pollId
+    ) external view pollExists(pollId) returns (PollView memory) {
+        return getPollView(pollId);
     }
 }
