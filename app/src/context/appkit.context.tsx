@@ -7,11 +7,11 @@ import { PropsWithChildren } from "react";
 
 const queryClient = new QueryClient();
 
-const projectId = "YOUR_PROJECT_ID";
+const projectId = import.meta.env.VITE_WALLETCONNECT_PROJECT_ID;
 
 const metadata = {
-  name: "AppKit",
-  description: "AppKit Example",
+  name: "PollGenie",
+  description: "Make polls powered by the blockchain!",
   url: "https://web3modal.com",
   icons: ["https://avatars.githubusercontent.com/u/37784886"],
 };

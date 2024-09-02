@@ -4,6 +4,7 @@ import { createBrowserRouter, RouterProvider } from "react-router-dom";
 import "./index.css";
 import Home from "./views/Home";
 import PollLayout from "./layouts/PollLayout";
+import { AppKitProvider } from "./context/appkit.context";
 
 const router = createBrowserRouter([
   {
@@ -18,6 +19,8 @@ const router = createBrowserRouter([
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <RouterProvider router={router} />
+    <AppKitProvider>
+      <RouterProvider router={router} />
+    </AppKitProvider>
   </StrictMode>
 );
