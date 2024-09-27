@@ -1,13 +1,15 @@
 import { useWeb3Modal } from "@web3modal/wagmi/react";
-import { Navigate } from "react-router-dom";
+import { Navigate, useLocation } from "react-router-dom";
 import { useAccount } from "wagmi";
 
 export default function Home() {
   const { open } = useWeb3Modal();
   const { status } = useAccount();
+  const location = useLocation();
 
   if (status === "connected") {
-    return <Navigate to="/polls" replace />;
+    const redirectPath = location.state?.redirect || "/polls";
+    return <Navigate to={redirectPath} replace />;
   }
 
   const handleConnectWallet = async function () {

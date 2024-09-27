@@ -11,7 +11,9 @@ export default function NewPoll() {
 
   return (
     <div className="flex flex-col">
-      <h2 className="text-white text-sm font-bold mb-8">Create a Poll</h2>
+      <div className="mb-16">
+        <h2 className="text-white text-2xl font-bold">Create a Poll</h2>
+      </div>
 
       <input
         placeholder="Give your Poll a name..."
@@ -35,13 +37,16 @@ export default function NewPoll() {
                 value={optionText}
                 onChange={(e) => handleOptionInput(i, e.target.value)}
               />
+
               <button
                 onClick={() =>
                   setOptions(
                     options.filter((_, deleteIndex) => i !== deleteIndex)
                   )
                 }
-                className="p-2"
+                className={`p-1 transition-all duration-200 delay-75 ${
+                  options.length > 2 ? "" : "opacity-0 pointer-events-none"
+                }`}
               >
                 <svg
                   width="16"

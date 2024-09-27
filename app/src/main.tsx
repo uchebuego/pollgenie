@@ -6,6 +6,7 @@ import Home from "./views/Home";
 import PollLayout from "./layouts/PollLayout";
 import NewPoll from "./views/NewPoll";
 import { AppKitProvider } from "./context/appkit.context";
+import Polls from "./views/Polls";
 
 const router = createBrowserRouter([
   {
@@ -18,6 +19,10 @@ const router = createBrowserRouter([
       {
         path: "new",
         element: <NewPoll />,
+      },
+      {
+        path: "polls",
+        element: <Polls />,
       },
     ],
   },
